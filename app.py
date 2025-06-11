@@ -51,8 +51,27 @@ def process_audio(audio_file_path, model_size, language_code, min_speakers, max_
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
         lang_code = language_code if language_code and language_code.strip() else None
-        min_spk = int(min_speakers) if min_speakers is not None and str(min_speakers).strip() not in ["", "None"] else None
-        max_spk = int(max_speakers) if max_speakers is not None and str(max_speakers).strip() not in ["", "None"] else None
+
+        # Process min_speakers from Gradio input
+        min_spk = None
+        if min_speakers is not None: # Gradio Number might pass float e.g. 0.0 for empty if not handled by value=None
+            try:
+                val_min = float(min_speakers) # Handle potential float like "0.0"
+                if val_min > 0:
+                    min_spk = int(val_min)
+                # else, if val_min is 0 or negative, it remains None (or could raise error)
+            except ValueError: # If input is not convertible to float (e.g. empty string if Textbox was used)
+                pass # min_spk remains None
+
+        # Process max_speakers from Gradio input
+        max_spk = None
+        if max_speakers is not None:
+            try:
+                val_max = float(max_speakers)
+                if val_max > 0:
+                    max_spk = int(val_max)
+            except ValueError:
+                pass # max_spk remains None
 
         # print(f"Using device: {device}") # Silenced
         # print(f"Configuring WhisperXDiarization with: model='{model_size}', lang='{lang_code}', "
