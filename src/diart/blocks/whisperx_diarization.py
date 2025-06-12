@@ -13,6 +13,8 @@ import whisperx
 import numpy as np
 from pyannote.core import Segment
 from whisperx.diarize import DiarizationPipeline as WXDiarizationPipeline # Correct import
+import os
+from dotenv import load_dotenv
 
 from .base import PipelineConfig, Pipeline, HyperParameter
 # Import AudioLoader if needed for duration/padding, similar to PipelineConfig
@@ -67,7 +69,7 @@ class WhisperXDiarizationConfig(PipelineConfig):
     device: torch.device = field(default_factory=lambda: torch.device("cuda" if torch.cuda.is_available() else "cpu"))
     compute_type: str | None = None # Will be set based on device in __post_init__
     batch_size: int = 16
-    hf_token: str | bool = True # Use HF token from env or login
+    hf_token: str | None = None # Default to None, will be loaded from env if not provided
     align_model: str | None = None
     interpolate_method: str = "nearest"
     return_char_alignments: bool = False
@@ -85,6 +87,12 @@ class WhisperXDiarizationConfig(PipelineConfig):
     max_speakers: int | None = None
 
     def __post_init__(self):
+        load_dotenv() # Load .env file if present
+        if self.hf_token is None or self.hf_token == "":
+            self.hf_token = os.getenv("HF_TOKEN")
+            # If still None, it means it wasn't in constructor, .env, or environment
+            # WhisperX/pyannote will handle None hf_token (might use global cache or fail for gated models)
+
         if self.compute_type is None:
             self.compute_type = "float16" if self.device.type == "cuda" else "int8"
         if self._latency is None:
