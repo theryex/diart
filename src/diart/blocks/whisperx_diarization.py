@@ -131,7 +131,7 @@ class WhisperXDiarization(Pipeline):
             #       f"on device '{self.config.device}' with compute_type '{self.config.compute_type}'")
             self.wx_model = whisperx.load_model(
                 self.config.model_name,
-                self.config.device,
+                str(self.config.device), # Pass device as string
                 compute_type=self.config.compute_type,
                 language=self.config.language_code,
                 #asr_options={"initial_prompt": ...} # Add if needed
