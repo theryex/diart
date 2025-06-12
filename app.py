@@ -176,8 +176,8 @@ inputs_list = [
     gr.Audio(sources=["upload", "microphone"], type="filepath", label="Upload Audio File or Record from Microphone"),
     gr.Dropdown(choices=WHISPERX_MODEL_SIZES, value='base', label="WhisperX Model Size"),
     gr.Textbox(label="Language Code (e.g., 'en', 'es', leave blank for auto-detect)", value=""),
-    gr.Number(label="Min Speakers (optional)", value=None, minimum=1, step=1, allow_none=True),
-    gr.Number(label="Max Speakers (optional)", value=None, minimum=1, step=1, allow_none=True)
+    gr.Number(label="Min Speakers (optional)", value=None, step=1), # minimum=1 and allow_none=True removed
+    gr.Number(label="Max Speakers (optional)", value=None, step=1)  # minimum=1 and allow_none=True removed
 ]
 
 iface = gr.Interface(
