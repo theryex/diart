@@ -12,6 +12,7 @@ from pyannote.metrics.diarization import DiarizationErrorRate
 import whisperx
 import numpy as np
 from pyannote.core import Segment
+from whisperx.diarize import DiarizationPipeline as WXDiarizationPipeline # Correct import
 
 from .base import PipelineConfig, Pipeline, HyperParameter
 # Import AudioLoader if needed for duration/padding, similar to PipelineConfig
@@ -154,10 +155,10 @@ class WhisperXDiarization(Pipeline):
                 # print("WhisperX alignment model loaded successfully.")
 
             # print("Initializing WhisperX DiarizationPipeline...")
-            self.diarize_model = whisperx.DiarizationPipeline(
+            self.diarize_model = WXDiarizationPipeline(
                 model_name="pyannote/speaker-diarization-huggingface", # Default, or make configurable
                 use_auth_token=self.config.hf_token, # hf_token can be True, False, or a string token
-                device=self.config.device
+                device=str(self.config.device) # Ensure device is passed as string
                 # min_speakers and max_speakers are passed during the call, not init for DiarizationPipeline
             )
             # print("WhisperX DiarizationPipeline initialized successfully.")
