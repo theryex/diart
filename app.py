@@ -11,6 +11,10 @@ import sys # For smoke test argv parsing
 import shutil # For smoke test cleanup
 from unittest.mock import patch, MagicMock # For smoke test mocking
 from pyannote.core import Segment # For smoke test mocking
+from dotenv import load_dotenv
+
+# Load environment variables from .env file at the start
+load_dotenv()
 
 # Define WhisperX model sizes
 WHISPERX_MODEL_SIZES = ['tiny', 'base', 'small', 'medium', 'large-v1', 'large-v2', 'large-v3']

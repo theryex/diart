@@ -87,10 +87,10 @@ class WhisperXDiarizationConfig(PipelineConfig):
     max_speakers: int | None = None
 
     def __post_init__(self):
-        load_dotenv() # Load .env file if present
+        # load_dotenv() # Removed: .env loading is now expected to happen at app startup
         if self.hf_token is None or self.hf_token == "":
             self.hf_token = os.getenv("HF_TOKEN")
-            # If still None, it means it wasn't in constructor, .env, or environment
+            # If still None, it means it wasn't in constructor or environment (already loaded by app)
             # WhisperX/pyannote will handle None hf_token (might use global cache or fail for gated models)
 
         if self.compute_type is None:
