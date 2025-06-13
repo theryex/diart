@@ -15,6 +15,7 @@ from pyannote.core import Segment
 from whisperx.diarize import DiarizationPipeline as WXDiarizationPipeline # Correct import
 import os
 from dotenv import load_dotenv
+import pandas as pd # Added for DataFrame check
 
 from .base import PipelineConfig, Pipeline, HyperParameter
 # Import AudioLoader if needed for duration/padding, similar to PipelineConfig
@@ -360,17 +361,34 @@ class WhisperXDiarization(Pipeline):
             )
             # print("Diarization finished.")
 
+            # Convert diarization_result to pyannote.core.Annotation if it's a DataFrame
+            di_annotation = Annotation(uri="whisperx_diarization_output")
+            if isinstance(diarization_result, pd.DataFrame) and not diarization_result.empty:
+                for _, row in diarization_result.iterrows():
+                    start_time = float(row['start'])
+                    end_time = float(row['end'])
+                    speaker_label = str(row['speaker']) # Ensure speaker label is a string
+                    segment = Segment(start_time, end_time)
+                    di_annotation[segment, speaker_label] = speaker_label # Store speaker as track & label
+            elif isinstance(diarization_result, Annotation):
+                # If it's already an annotation, use it directly, perhaps copy to ensure URI
+                di_annotation = diarization_result.rename_labels(copy=True)
+                di_annotation.uri = "whisperx_diarization_output"
+
             # 4. Assign word speakers
-            if diarization_result is not None and diarization_result.get_timeline().duration() > 0:
+            # Use the converted di_annotation here
+            if di_annotation.get_timeline().duration() > 0:
                 # print("Assigning word speakers...")
-                final_result = whisperx.assign_word_speakers(diarization_result, aligned_result)
+                final_result = whisperx.assign_word_speakers(di_annotation, aligned_result)
                 # print("Word speaker assignment finished.")
             else:
                 # print("No speaker turns from diarization pipeline or empty result. Using aligned result without speaker info.")
                 final_result = aligned_result
 
-            # 5. Convert to pyannote.core.Annotation
-            output_annotation = Annotation(uri="diart_whisperx_output") # Use a fixed or configurable URI
+            # 5. Convert final_result (which now includes speaker assignments on word level)
+            # to the output pyannote.core.Annotation.
+            # The final_result["segments"] should contain the text and speaker for each segment.
+            output_annotation = Annotation(uri="diart_whisperx_output")
 
             for segment_data in final_result.get("segments", []):
                 start = segment_data.get("start")
