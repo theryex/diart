@@ -72,6 +72,7 @@ class WhisperXDiarizationConfig(PipelineConfig):
     batch_size: int = 16
     hf_token: str | None = None # Default to None, will be loaded from env if not provided
     align_model: str | None = None
+    diarization_model_name: str = "pyannote/speaker-diarization-3.1"
     interpolate_method: str = "nearest"
     return_char_alignments: bool = False
 
@@ -165,7 +166,7 @@ class WhisperXDiarization(Pipeline):
 
             # print("Initializing WhisperX DiarizationPipeline...")
             self.diarize_model = WXDiarizationPipeline(
-                model_name="pyannote/speaker-diarization-huggingface", # Default, or make configurable
+                model_name=self.config.diarization_model_name,
                 use_auth_token=self.config.hf_token, # hf_token can be True, False, or a string token
                 device=str(self.config.device) # Ensure device is passed as string
                 # min_speakers and max_speakers are passed during the call, not init for DiarizationPipeline
