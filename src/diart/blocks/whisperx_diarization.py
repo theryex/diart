@@ -292,7 +292,7 @@ class WhisperXDiarization(Pipeline):
         if not full_audio_data_list:
             return [(Annotation(uri="empty_input"), waveforms[-1])] # Or handle as error
 
-        full_audio_np = np.concatenate(full_audio_data_list).astype(np.float32)
+        full_audio_np = np.ascontiguousarray(np.concatenate(full_audio_data_list).astype(np.float32))
 
         # Ensure audio meets minimum duration for WhisperX, if specified
         current_audio_duration_sec = total_samples / self.config.sample_rate
@@ -332,13 +332,13 @@ class WhisperXDiarization(Pipeline):
 
             if not current_align_model or not current_align_metadata:
                  # print("Alignment model or metadata not available. Skipping alignment.")
-                 return [(Annotation(uri="error_align_model_unavailable"), waveforms[-1])]
+                 return "Error: Alignment model or metadata not available.", [], None, None
 
 
             # 2. Align
             if not asr_result["segments"]:
                 # print("No segments found by ASR. Skipping alignment and diarization.")
-                return [(Annotation(uri="no_asr_segments"), waveforms[-1])]
+                return "No segments found by ASR. Skipping alignment and diarization.", [], None, None
 
             # print("Aligning transcript...")
             aligned_result = whisperx.align(
