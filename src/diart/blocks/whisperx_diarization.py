@@ -78,15 +78,13 @@ class WhisperXDiarization(Pipeline):
                     language_code=self.config.language_code, device=str(self.config.device), # device to string
                 )
 
-            # Use hf_token from config; it could be None, True (bool from older pyannote), or a string.
-            # WXDiarizationPipeline expects None or string.
             hf_token_for_diarization = self.config.hf_token
-            if isinstance(hf_token_for_diarization, bool): # Coerce boolean True to None for WXDiarizationPipeline if it expects str/None
-                 hf_token_for_diarization = None # Or os.getenv("HF_TOKEN") again if True meant "try to use env"
+            if isinstance(hf_token_for_diarization, bool):
+                 hf_token_for_diarization = None
 
             self.diarize_model = WXDiarizationPipeline(
                 model_name=self.config.diarization_model_name,
-                use_auth_token=hf_token_for_diarization, # Pass the processed token
+                use_auth_token=hf_token_for_diarization,
                 device=str(self.config.device)
             )
         except Exception as e:
@@ -106,22 +104,18 @@ class WhisperXDiarization(Pipeline):
     def set_timestamp_shift(self, shift: float): self.timestamp_shift = shift
 
     def __call__(self, waveforms: Sequence[SlidingWindowFeature]) -> Sequence[Tuple[Annotation, SlidingWindowFeature]]:
-        # This __call__ method must return Sequence[Tuple[Annotation, SlidingWindowFeature]]
-        # All early exits due to errors should also conform to this return type.
-        # The 4-tuple formatting for Gradio is handled in app.py's process_audio.
-
         last_waveform_or_none = waveforms[-1] if waveforms else None
 
-        if not self.wx_model: # Removed self.diarize_model check here as it's always created or __init__ raises
+        if not self.wx_model:
             err_ann = Annotation(uri="error_models_not_loaded")
             err_ann[Segment(0, 0.01), "ERROR"] = "WhisperX ASR model not loaded properly."
             return [(err_ann, last_waveform_or_none)]
-        if not self.diarize_model: # Explicitly check diarize_model
+        if not self.diarize_model:
             err_ann = Annotation(uri="error_diarize_model_not_loaded")
             err_ann[Segment(0, 0.01), "ERROR"] = "WhisperX Diarization model not loaded properly."
             return [(err_ann, last_waveform_or_none)]
         if not waveforms:
-            return [] # Correct for empty input sequence per type hint
+            return []
 
         full_audio_data_list = []
         total_samples = 0
@@ -157,7 +151,7 @@ class WhisperXDiarization(Pipeline):
                     return [(err_ann, last_waveform_or_none)]
                 try:
                     current_align_model, current_align_metadata = whisperx.load_align_model(
-                        language_code=detected_language, device=str(self.config.device)) # device to string
+                        language_code=detected_language, device=str(self.config.device))
                 except Exception as e:
                     msg = f"Failed to load alignment model for lang '{detected_language}': {e}"
                     err_ann = Annotation(uri="error_load_align_model")
@@ -175,11 +169,9 @@ class WhisperXDiarization(Pipeline):
 
             aligned_result = whisperx.align(
                 asr_result["segments"], current_align_model, current_align_metadata,
-                full_audio_np, str(self.config.device), return_char_alignments=self.config.return_char_alignments # device to string
+                full_audio_np, str(self.config.device), return_char_alignments=self.config.return_char_alignments
             )
 
-            # MODIFICATION 1: Correct the input to self.diarize_model
-            # The user-provided code already has this correct:
             diarization_result = self.diarize_model(
                 full_audio_np,
                 min_speakers=self.config.min_speakers,
@@ -189,12 +181,16 @@ class WhisperXDiarization(Pipeline):
             di_annotation = Annotation(uri="whisperx_diarization_output")
             if isinstance(diarization_result, pd.DataFrame) and not diarization_result.empty:
                 for _, row in diarization_result.iterrows():
-                    start_time, end_time, speaker_label = float(row['start']), float(row['end']), str(row['speaker'])
-                    di_annotation[Segment(start_time, end_time), speaker_label] = speaker_label
-            elif isinstance(diarization_result, Annotation): # If it's already an annotation
-                di_annotation = diarization_result.rename_labels(copy=True) # Use a copy
+                    start_time, end_time = float(row['start']), float(row['end'])
+                    original_speaker_id = str(row['speaker'])
+                    # Create a prefixed track label
+                    track_label = f"SPEAKER_{original_speaker_id}"
+                    segment = Segment(start_time, end_time)
+                    # Use this track_label for both the track and the segment's label on that track
+                    di_annotation[segment, track_label] = track_label
+            elif isinstance(diarization_result, Annotation):
+                di_annotation = diarization_result.rename_labels(copy=True)
                 di_annotation.uri = "whisperx_diarization_output"
-
 
             if di_annotation.get_timeline().duration() > 0:
                 final_result = whisperx.assign_word_speakers(di_annotation, aligned_result)
@@ -216,11 +212,8 @@ class WhisperXDiarization(Pipeline):
             print(f"Error during WhisperX processing: {e}")
             import traceback
             traceback.print_exc()
-            # MODIFICATION 2: Fix return for consistent type hint
             error_annotation = Annotation(uri="critical_error_in_whisperx_pipeline_call")
-            # Use current_audio_duration_sec if available, else a small default for segment
             error_segment_duration = current_audio_duration_sec if 'current_audio_duration_sec' in locals() and current_audio_duration_sec > 0 else 0.01
             error_segment = Segment(0, error_segment_duration)
             error_annotation[error_segment, "ERROR"] = str(e)
             return [(error_annotation, last_waveform_or_none)]
-```
