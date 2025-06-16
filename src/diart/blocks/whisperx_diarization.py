@@ -183,8 +183,11 @@ class WhisperXDiarization(Pipeline):
                 for _, row in diarization_result.iterrows():
                     start_time, end_time = float(row['start']), float(row['end'])
                     original_speaker_id = str(row['speaker'])
-                    # Create a prefixed track label
-                    track_label = f"SPEAKER_{original_speaker_id}"
+                    # Prevent double prefixing
+                    if original_speaker_id.startswith('SPEAKER_'):
+                        track_label = original_speaker_id
+                    else:
+                        track_label = f"SPEAKER_{original_speaker_id}"
                     segment = Segment(start_time, end_time)
                     # Use this track_label for both the track and the segment's label on that track
                     di_annotation[segment, track_label] = track_label
