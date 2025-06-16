@@ -192,6 +192,7 @@ class WhisperXDiarization(Pipeline):
                 di_annotation = diarization_result.rename_labels(copy=True)
                 di_annotation.uri = "whisperx_diarization_output"
 
+            print(f"[DEBUG] di_annotation track labels: {list(di_annotation.labels())}")
             if di_annotation.get_timeline().duration() > 0:
                 final_result = whisperx.assign_word_speakers(di_annotation, aligned_result)
             else:
