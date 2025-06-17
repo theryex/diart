@@ -197,6 +197,16 @@ class WhisperXDiarization(Pipeline):
 
             print(f"[DEBUG] di_annotation track labels: {list(di_annotation.labels())}")
             if di_annotation.get_timeline().duration() > 0:
+                print(f"[DEBUG] aligned_result number of segments: {len(aligned_result.get('segments', []))}")
+                if aligned_result.get('segments'):
+                    print(f"[DEBUG] First 5 aligned_result segments: {aligned_result['segments'][:5]}")
+                    # Also print words of the very first segment if it exists and has words
+                    if aligned_result['segments'][0].get('words'):
+                        print(f"[DEBUG] First 10 words of first aligned_result segment: {aligned_result['segments'][0]['words'][:10]}")
+                    else:
+                        print(f"[DEBUG] First aligned_result segment has no 'words' key or empty words.")
+                else:
+                    print(f"[DEBUG] aligned_result has no 'segments' key or segments list is empty.")
                 final_result = whisperx.assign_word_speakers(di_annotation, aligned_result)
             else:
                 final_result = aligned_result
