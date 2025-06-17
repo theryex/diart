@@ -194,31 +194,43 @@ class WhisperXDiarization(Pipeline):
             elif isinstance(diarization_result, Annotation):
                 di_annotation = diarization_result.rename_labels(copy=True)
                 di_annotation.uri = "whisperx_diarization_output"
+            # Removed debug prints for di_annotation and aligned_result here
 
-            print(f"[DEBUG] di_annotation track labels: {list(di_annotation.labels())}")
-            if di_annotation.get_timeline().duration() > 0:
-                print(f"[DEBUG] aligned_result number of segments: {len(aligned_result.get('segments', []))}")
-                if aligned_result.get('segments'):
-                    print(f"[DEBUG] First 5 aligned_result segments: {aligned_result['segments'][:5]}")
-                    # Also print words of the very first segment if it exists and has words
-                    if aligned_result['segments'][0].get('words'):
-                        print(f"[DEBUG] First 10 words of first aligned_result segment: {aligned_result['segments'][0]['words'][:10]}")
-                    else:
-                        print(f"[DEBUG] First aligned_result segment has no 'words' key or empty words.")
-                else:
-                    print(f"[DEBUG] aligned_result has no 'segments' key or segments list is empty.")
-                final_result = whisperx.assign_word_speakers(di_annotation, aligned_result)
-            else:
-                final_result = aligned_result
+            # Default final_result to aligned_result (ASR segments without speaker info)
+            final_result = aligned_result
+
+            # Check if diarization_result can be used with assign_word_speakers
+            if isinstance(diarization_result, pd.DataFrame) and not diarization_result.empty:
+                # Convert DataFrame to Annotation before passing to assign_word_speakers
+                # This step was part of the previous logic to create di_annotation.
+                # assign_word_speakers expects an Annotation object or a DataFrame for its first argument.
+                # If diarization_result is a DataFrame, it can be passed directly as per whisperx docs.
+                final_result = whisperx.assign_word_speakers(diarization_result, aligned_result)
+            elif isinstance(diarization_result, Annotation) and diarization_result.get_timeline().duration() > 0:
+                # If it's already an annotation and has speaker turns, use it
+                final_result = whisperx.assign_word_speakers(diarization_result, aligned_result)
+            # If diarization_result is None, an empty DataFrame, or an empty Annotation,
+            # final_result remains aligned_result, which lacks speaker assignments.
+            # The di_annotation conversion logic is now implicitly handled by assign_word_speakers if it accepts DataFrames,
+            # or needs to be done before if it strictly needs an Annotation.
+            # The prompt implies diarization_result (DataFrame or Annotation) is passed to assign_word_speakers.
 
             output_annotation = Annotation(uri="diart_whisperx_output")
             for segment_data in final_result.get("segments", []):
-                start, end = segment_data.get("start"), segment_data.get("end")
+                start = segment_data.get("start")
+                end = segment_data.get("end")
+
                 if start is None or end is None: continue
-                start_time, end_time = float(start) + self.timestamp_shift, float(end) + self.timestamp_shift
+
+                start_time = float(start) + self.timestamp_shift
+                end_time = float(end) + self.timestamp_shift
                 if end_time < start_time: end_time = start_time
-                speaker_label, text = segment_data.get("speaker", "SPEAKER_UNKNOWN"), segment_data.get("text", "").strip()
-                output_annotation[Segment(start_time, end_time), speaker_label] = text
+
+                speaker_label = segment_data.get("speaker", "SPEAKER_UNKNOWN")
+                text = segment_data.get("text", "").strip()
+
+                segment_obj = Segment(start_time, end_time)
+                output_annotation[segment_obj, speaker_label] = text
 
             return [(output_annotation, last_waveform_or_none)]
 
