@@ -32,7 +32,7 @@ def _format_timestamp_srt(seconds: float) -> str:
     mins %= 60
     return f"{hours:02d}:{mins:02d}:{secs:02d},{millis:03d}"
 
-def process_audio(audio_file_path, model_size, language_code, min_speakers, max_speakers, progress=gr.Progress(track_tqdm=True)):
+def process_audio(audio_file_path, model_size, language_code, align_model_ui, batch_size_ui, compute_type_ui, min_speakers, max_speakers, progress=gr.Progress(track_tqdm=True)):
     error_transcript = "An error occurred. Please check the console logs."
     empty_segments_df = []
     no_file = None
@@ -45,6 +45,9 @@ def process_audio(audio_file_path, model_size, language_code, min_speakers, max_
     # print(f"Audio path: {audio_file_path}")
     # print(f"Model size: {model_size}")
     # print(f"Language code: {language_code}")
+    # print(f"Alignment Model UI: {align_model_ui}")
+    # print(f"Batch Size UI: {batch_size_ui}")
+    # print(f"Compute Type UI: {compute_type_ui}")
     # print(f"Min speakers: {min_speakers}")
     # print(f"Max speakers: {max_speakers}")
     # print("-----------------------\n")
@@ -78,13 +81,40 @@ def process_audio(audio_file_path, model_size, language_code, min_speakers, max_
                 pass # max_spk remains None
 
         # print(f"Using device: {device}") # Silenced
+
+        # Process align_model_ui
+        align_model_to_pass = None
+        if align_model_ui and align_model_ui.strip() and align_model_ui != "Auto (default based on language)":
+            align_model_to_pass = align_model_ui.strip()
+
+        # Process batch_size_ui
+        processed_batch_size = 16 # Default from WhisperXDiarizationConfig.batch_size
+        try:
+            if batch_size_ui is not None:
+                val_bs = int(str(batch_size_ui).strip())
+                if val_bs > 0:
+                    processed_batch_size = val_bs
+                else:
+                    print(f"Warning: Custom batch size '{batch_size_ui}' is not positive. Using default {processed_batch_size}.")
+        except ValueError:
+            print(f"Warning: Invalid custom batch size '{batch_size_ui}'. Using default {processed_batch_size}.")
+
+        # Process compute_type_ui
+        compute_type_to_pass = None # This will let WhisperXDiarizationConfig use its default logic
+        if compute_type_ui and compute_type_ui.lower() != "auto":
+            compute_type_to_pass = compute_type_ui.lower() # Ensure consistent case e.g. float16
+
         # print(f"Configuring WhisperXDiarization with: model='{model_size}', lang='{lang_code}', "
+        #       f"align_model='{align_model_to_pass}', batch_size={processed_batch_size}, compute_type='{compute_type_to_pass}', "
         #       f"min_speakers={min_spk}, max_speakers={max_spk}") # Silenced
 
         config = WhisperXDiarizationConfig(
             model_name=model_size,
             language_code=lang_code,
             device=device,
+            align_model=align_model_to_pass,
+            batch_size=processed_batch_size,
+            compute_type=compute_type_to_pass, # Pass processed compute_type
             min_speakers=min_spk,
             max_speakers=max_spk,
             _sample_rate=DEFAULT_SAMPLE_RATE
@@ -213,8 +243,30 @@ inputs_list = [
     gr.Audio(sources=["upload", "microphone"], type="filepath", label="Upload Audio File or Record from Microphone"),
     gr.Dropdown(choices=WHISPERX_MODEL_SIZES, value='base', label="WhisperX Model Size"),
     gr.Textbox(label="Language Code (e.g., 'en', 'es', leave blank for auto-detect)", value=""),
-    gr.Number(label="Min Speakers (optional)", value=None, step=1), # minimum=1 and allow_none=True removed
-    gr.Number(label="Max Speakers (optional)", value=None, step=1)  # minimum=1 and allow_none=True removed
+    gr.Dropdown(
+        label="Alignment Model",
+        choices=[
+            "Auto (default based on language)",
+            "WAV2VEC2_ASR_BASE_960H", # Common for English
+            "WAV2VEC2_ASR_LARGE_LV60K_960H", # Larger English model
+            # Users can type other Hugging Face model names
+        ],
+        value="Auto (default based on language)",
+        allow_custom_value=True
+    ),
+    gr.Dropdown(
+        label="Batch Size (for ASR)",
+        choices=[1, 2, 4, 8, 16, 32], # Common batch sizes
+        value=16, # Default WhisperXDiarizationConfig.batch_size
+        allow_custom_value=True # Allow user to type other integer values
+    ),
+    gr.Dropdown(
+        label="Compute Type",
+        choices=["auto", "float16", "int8", "float32"],
+        value="auto",
+    ),
+    gr.Number(label="Min Speakers (optional)", value=None, step=1),
+    gr.Number(label="Max Speakers (optional)", value=None, step=1)
 ]
 
 iface = gr.Interface(

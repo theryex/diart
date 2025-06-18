@@ -71,12 +71,26 @@ class WhisperXDiarization(Pipeline):
                 self.config.model_name, str(self.config.device),
                 compute_type=self.config.compute_type, language=self.config.language_code,
             )
-            if self.config.language_code is None or self.config.language_code == "":
-                self.align_model, self.align_metadata = None, None
-            else:
+            # Load alignment model
+            device_str = str(self.config.device) # Ensure device is a string for all whisperx calls
+            if self.config.align_model is not None:
+                # User specified a custom alignment model name
+                # language_code might be optional if model_name is specific, or still used by whisperx
                 self.align_model, self.align_metadata = whisperx.load_align_model(
-                    language_code=self.config.language_code, device=str(self.config.device), # device to string
+                    model_name=self.config.align_model,
+                    language_code=self.config.language_code if self.config.language_code and self.config.language_code.strip() else None,
+                    device=device_str
                 )
+            elif self.config.language_code is not None and self.config.language_code.strip() != "":
+                # Language provided, use default alignment model for this language
+                self.align_model, self.align_metadata = whisperx.load_align_model(
+                    language_code=self.config.language_code,
+                    device=device_str,
+                    model_name=None # Explicitly use default for the language
+                )
+            else:
+                # No specific align_model and no language_code means dynamic loading in __call__
+                self.align_model, self.align_metadata = None, None
 
             hf_token_for_diarization = self.config.hf_token
             if isinstance(hf_token_for_diarization, bool):
@@ -143,17 +157,41 @@ class WhisperXDiarization(Pipeline):
             asr_result = self.wx_model.transcribe(full_audio_np, batch_size=self.config.batch_size)
 
             current_align_model, current_align_metadata = self.align_model, self.align_metadata
+
+            # Condition for dynamic loading:
+            # 1. No align model loaded yet (current_align_model is None).
+            # This happens if both config.language_code and config.align_model were None at init.
+            # 2. Or, a specific align_model was requested in config, but no language_code was provided at init,
+            #    so we need to ensure the detected language is compatible or use the specific model.
+            #    (The __init__ logic now tries to load align_model if config.align_model is set,
+            #     so this second condition might be less common unless that load fails silently or is deferred).
+            # The primary case for dynamic loading is when self.align_model is None.
             if current_align_model is None:
                 detected_language = asr_result.get("language")
-                if not detected_language:
-                    err_ann = Annotation(uri="error_no_language_detected")
-                    err_ann[Segment(0, 0.01), "ERROR"] = "Could not detect language for alignment."
+
+                # Determine language to use for loading: detected, or from config if it was set but model wasn't pre-loaded
+                lang_for_align = detected_language if detected_language else self.config.language_code
+
+                if not lang_for_align and not self.config.align_model:
+                    err_ann = Annotation(uri="error_no_language_for_align")
+                    err_ann[Segment(0, 0.01), "ERROR"] = "Cannot determine language or specific model for alignment."
                     return [(err_ann, last_waveform_or_none)]
                 try:
+                    # Prioritize specific align_model from config if available, else use default for language
+                    model_to_load_dynamically = self.config.align_model
+                    # print(f"[DEBUG] Dynamically loading align model. Name: {model_to_load_dynamically}, Lang: {lang_for_align}")
                     current_align_model, current_align_metadata = whisperx.load_align_model(
-                        language_code=detected_language, device=str(self.config.device))
+                        model_name=model_to_load_dynamically, # This can be None
+                        language_code=lang_for_align, # This can be None if model_name is specific
+                        device=str(self.config.device)
+                    )
+                    # Cache it back if language was auto-detected and no specific model name was in config initially
+                    # This simple caching is for the case where language_code was None AND align_model was None in config.
+                    if detected_language and self.config.language_code is None and self.config.align_model is None:
+                        self.align_model = current_align_model
+                        self.align_metadata = current_align_metadata
                 except Exception as e:
-                    msg = f"Failed to load alignment model for lang '{detected_language}': {e}"
+                    msg = f"Failed to dynamically load alignment model (model: {self.config.align_model}, lang: {lang_for_align}): {e}"
                     err_ann = Annotation(uri="error_load_align_model")
                     err_ann[Segment(0, 0.01), "ERROR"] = msg
                     return [(err_ann, last_waveform_or_none)]
