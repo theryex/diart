@@ -200,7 +200,7 @@ def process_audio(audio_file_path, model_size, language_code, min_speakers, max_
             full_transcript_text += "\n\nError: Could not save TXT/SRT files."
 
         # progress(1.0, desc="Completed.")
-        print(f"[DEBUG] segments_for_df for Gradio: {segments_for_df}")
+        # Removed: print(f"[DEBUG] segments_for_df for Gradio: {segments_for_df}")
         return full_transcript_text, segments_for_df, txt_file_path, srt_file_path
 
     except Exception as e:
