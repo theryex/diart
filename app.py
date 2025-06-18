@@ -124,10 +124,12 @@ def process_audio(audio_file_path, model_size, language_code, min_speakers, max_
         if not isinstance(full_annotation, Annotation): # Should not happen if pipeline adheres to type hints
             return "Error: Pipeline returned unexpected data type.", empty_segments_df, no_file, no_file
 
-        if "ERROR" in full_annotation.tracks():
+        if "ERROR" in full_annotation.labels(): # Changed from .tracks() to .labels()
             is_error_annotation = True
             try:
                 # Extract the first error message
+                # Iterating tracks is still fine if "ERROR" is a track label.
+                # The .labels() check is for the presence of "ERROR" as a label name.
                 error_segment_data = next(iter(full_annotation.itertracks(yield_label=True, track="ERROR")))
                 error_message_from_pipeline = error_segment_data[2] # The actual error message string
             except StopIteration:
