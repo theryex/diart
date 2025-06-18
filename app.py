@@ -118,12 +118,42 @@ def process_audio(audio_file_path, model_size, language_code, min_speakers, max_
 
         full_annotation = results[0][0]
 
-        if not isinstance(full_annotation, Annotation) or not list(full_annotation.itersegments()):
-             full_transcript_text = "No speech detected or transcribed."
+        # Check for pipeline processing errors indicated by an "ERROR" track in the annotation
+        is_error_annotation = False
+        error_message_from_pipeline = "Unknown processing error from pipeline."
+        if not isinstance(full_annotation, Annotation): # Should not happen if pipeline adheres to type hints
+            return "Error: Pipeline returned unexpected data type.", empty_segments_df, no_file, no_file
+
+        if "ERROR" in full_annotation.tracks():
+            is_error_annotation = True
+            try:
+                # Extract the first error message
+                error_segment_data = next(iter(full_annotation.itertracks(yield_label=True, track="ERROR")))
+                error_message_from_pipeline = error_segment_data[2] # The actual error message string
+            except StopIteration:
+                error_message_from_pipeline = "Processing error occurred (no specific message in annotation)."
+            except Exception as e_extract:
+                error_message_from_pipeline = f"Processing error (details unavailable: {e_extract})."
+
+        if is_error_annotation:
+            full_transcript_text = f"Pipeline Error: {error_message_from_pipeline}"
+            segments_for_df = []
+            txt_file_path = None
+            srt_file_path = None
+            # No files to create, return immediately
+            return full_transcript_text, segments_for_df, txt_file_path, srt_file_path
+
+        # If not an error annotation, proceed with normal processing:
+        if not list(full_annotation.itersegments()): # Check if a valid annotation is empty
+             full_transcript_text = "No speech detected or transcribed (empty annotation)."
              segments_for_df = []
+             # No content to write to files if annotation is empty
              return full_transcript_text, segments_for_df, no_file, no_file
 
         transcript_parts = []
+        # Ensure sorted_segments is defined before use in SRT generation
+        # The itertracks() itself might be an issue if annotation is minimal (e.g. only error track)
+        # But if not is_error_annotation, we assume it's a valid transcription annotation.
         sorted_segments = sorted(list(full_annotation.itertracks(yield_label=True)), key=lambda x: x[0].start)
 
         for segment, speaker, text in sorted_segments:
